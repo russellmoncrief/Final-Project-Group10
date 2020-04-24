@@ -58,3 +58,5 @@ plt.show()
 
 #print shape of data
 print(xray_data.shape)
+
+
