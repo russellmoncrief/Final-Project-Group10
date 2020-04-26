@@ -11,17 +11,21 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential
-from keras.layers import Dense, Activation
-import tensorflow.compat.v1 as tf
+from keras.layers import Dense
+from keras.optimizers import Adam
+from sklearn.metrics import cohen_kappa_score, f1_score
+from keras.callbacks import ModelCheckpoint
+
 
 os.chdir("/home/ubuntu/Machine-Learning/Python-Math/")
 
 #load file that contains features
 
 data = pd.read_csv("/home/ubuntu/Machine-Learning/Python-Math/Data_Entry_2017.csv")
-#print("Number of observations:", len(data))
-#print(data.head(5))
+print("Number of observations:", len(data))
+print(data.head(5))
 
 #display a sample of images
 
@@ -32,11 +36,11 @@ image2 = mpimg.imread('/home/ubuntu/Machine-Learning/Python-Math/images_001/imag
 #Image of Cardiomegaly/Effusion
 image3 = mpimg.imread('/home/ubuntu/Machine-Learning/Python-Math/images_001/images/00000001_002.png')
 plt.imshow(image1)
-#plt.show()
+plt.show()
 plt.imshow(image2)
-#plt.show()
+plt.show()
 plt.imshow(image3)
-#plt.show()
+plt.show()
 
 #director where jpgs are stored
 
@@ -71,10 +75,10 @@ df_count_per_unique_label = count_per_unique_label.to_frame()
 print(df_count_per_unique_label)
 
 #plot unique label counts
-#sns.barplot(x = df_count_per_unique_label.index[:20],
-#y="Finding Labels", data=df_count_per_unique_label[:20], color = "green")
-#plt.xticks(rotation = 90)
-#plt.show()
+sns.barplot(x = df_count_per_unique_label.index[:20],
+y="Finding Labels", data=df_count_per_unique_label[:20], color = "green")
+plt.xticks(rotation = 90)
+plt.show()
 
 #get shape of data
 print(data.shape)
@@ -134,9 +138,18 @@ x_test, y_test = next(flow_from_dataframe(data_gen, test, path_col = 'full_path'
 target_size = image_size, color_mode = 'grayscale', batch_size = 2048))
 
 
+LR = 1e-3
+model = Sequential([Dense(12, input_shape=x_test.shape[1:], activation="relu"), Dense(14, activation="softmax")])
 
-model = Sequential([Dense(32, input_shape=(784,)),Activation('relu'),Dense(10),Activation('softmax'),])
-print(train.shape, test.shape)
-print(train['full_path'])
+model.compile(optimizer=Adam(lr=LR), loss="categorical_crossentropy", metrics=["accuracy"])
+
+checkpointer = ModelCheckpoint(filepath='weights.best.{epoch:02d}-{val_loss:.2f}.hdf5', verbose=1, save_best_only = True)
+callbacks_list = [checkpointer]
+
+model.fit_generator(generator = train_gen, steps_per_epoch = 20, epochs = 100, callbacks = callbacks_list,
+                    validation_data = (x_test, y_test))
+
+pred= model.predict(x_test, batch_size = 64, verbose = 1)
+
 
 
