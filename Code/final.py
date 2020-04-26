@@ -11,14 +11,17 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from keras.preprocessing.image import ImageDataGenerator
+from keras.models import Sequential
+from keras.layers import Dense, Activation
+import tensorflow.compat.v1 as tf
 
 os.chdir("/home/ubuntu/Machine-Learning/Python-Math/")
 
 #load file that contains features
 
 data = pd.read_csv("/home/ubuntu/Machine-Learning/Python-Math/Data_Entry_2017.csv")
-print("Number of observations:", len(data))
-print(data.head(5))
+#print("Number of observations:", len(data))
+#print(data.head(5))
 
 #display a sample of images
 
@@ -52,11 +55,11 @@ dir = ["/home/ubuntu/Machine-Learning/Python-Math/images_001/images/",
 
 #compile images
 
-for path in dir:
-    my_glob = glob(path + "*.png")
-    print(len(my_glob))
-    full_img_paths = {os.path.basename(x): x for x in my_glob}
-    data['full_path'] = data['Image Index'].map(full_img_paths.get)
+my_glob = glob("/home/ubuntu/Machine-Learning/Python-Math/images*/images*/*.png")
+print(len(my_glob))
+full_img_paths = {os.path.basename(x): x for x in my_glob}
+data['full_path'] = data['Image Index'].map(full_img_paths.get)
+print(data['full_path'])
 
 #print length of data and unique labels
 print(len(data))
@@ -68,14 +71,13 @@ df_count_per_unique_label = count_per_unique_label.to_frame()
 print(df_count_per_unique_label)
 
 #plot unique label counts
-sns.barplot(x = df_count_per_unique_label.index[:20],
-y="Finding Labels", data=df_count_per_unique_label[:20], color = "green")
-plt.xticks(rotation = 90)
+#sns.barplot(x = df_count_per_unique_label.index[:20],
+#y="Finding Labels", data=df_count_per_unique_label[:20], color = "green")
+#plt.xticks(rotation = 90)
 #plt.show()
 
 #get shape of data
 print(data.shape)
-
 
 # One-hot encode labels
 dummy_labels = ['Atelectasis', 'Consolidation', 'Infiltration', 'Pneumothorax', 'Edema', 'Emphysema', 'Fibrosis',
@@ -89,7 +91,6 @@ print(data.head(20))
 label_sum = data[dummy_labels].sum()
 print(label_sum)
 
-#balance data
 
 data['target_vector'] = data.apply(lambda target: [target[dummy_labels].values], 1).map(lambda target: target[0])
 print(data.head())
@@ -104,6 +105,7 @@ print('prior, full data set - # of observations): ', len(data))
 data_gen = ImageDataGenerator(rescale=1./255,shear_range=0.2,zoom_range=0.2,
         rotation_range=20,width_shift_range=0.2,height_shift_range=0.2,
         horizontal_flip=True)
+
 
 def flow_from_dataframe(img_data_gen, in_df, path_col, y_col, **dflow_args):
     base_dir = os.path.dirname(in_df[path_col].values[0])
@@ -120,7 +122,7 @@ def flow_from_dataframe(img_data_gen, in_df, path_col, y_col, **dflow_args):
     print('Reinserting dataframe: {} images'.format(in_df.shape[0]))
     return df_gen
 
-image_size = (128, 128) # image re-sizing target
+image_size = (128, 128)
 train_gen = flow_from_dataframe(data_gen, train, path_col = 'full_path', y_col = 'target_vector',
 target_size = image_size, color_mode = 'grayscale', batch_size = 32)
 
@@ -131,5 +133,10 @@ target_size = image_size, color_mode = 'grayscale', batch_size = 128)
 x_test, y_test = next(flow_from_dataframe(data_gen, test, path_col = 'full_path', y_col = 'target_vector',
 target_size = image_size, color_mode = 'grayscale', batch_size = 2048))
 
+
+
+model = Sequential([Dense(32, input_shape=(784,)),Activation('relu'),Dense(10),Activation('softmax'),])
+print(train.shape, test.shape)
+print(train['full_path'])
 
 
