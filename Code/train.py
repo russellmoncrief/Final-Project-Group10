@@ -2,17 +2,19 @@ import numpy as np
 import pandas as pd
 import os
 from glob import glob
-from keras.layers import GlobalAveragePooling2D, Dense, Conv2D
 from keras.preprocessing.image import ImageDataGenerator
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
-from keras.models import Sequential
-from keras.layers import GlobalAveragePooling2D, Dense, Dropout, Flatten, MaxPooling2D
+from keras.applications.resnet50 import ResNet50
+from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from keras import optimizers
 from keras.optimizers import Adam
 from keras.models import load_model
-from sklearn.metrics import accuracy_score, confusion_matrix
-
+from keras.applications.mobilenet import MobileNet
+from keras.layers import GlobalAveragePooling2D, Dense, Dropout, Flatten, Conv2D, MaxPooling2D
+from keras.models import Sequential
+from tqdm import tqdm
 
 ###%% --------------------------------------- Set-Up --------------------------------------------------------------------
 SEED = 42
@@ -135,6 +137,7 @@ min_age = min(test_df['Patient Age'])
 diff = max(test_df['Patient Age']) - min_age
 test_df['Patient Age'] = test_df['Patient Age'].map(lambda age: (age-min_age)/diff)
 test_df.drop('Patient ID',axis=1,inplace=True)
+
 
 
 ## Preprocessing
@@ -267,29 +270,100 @@ for i, met in enumerate(['acc', 'loss']):
 plt.show()
 
 
+## ------ Pre-Trained Model
 
-preds = model.predict(test_X)
 
-acc = accuracy_score(test_Y, np.round(preds))*100
-cm = confusion_matrix(test_Y, np.round(preds))
-tn, fp, fn, tp = cm.ravel()
-
-print('CONFUSION MATRIX ------------------')
-print(cm)
-
-print('\nTEST METRICS ----------------------')
-precision = tp/(tp+fp)*100
-recall = tp/(tp+fn)*100
-print('Accuracy: {}%'.format(acc))
-print('Precision: {}%'.format(precision))
-print('Recall: {}%'.format(recall))
-print('F1-score: {}'.format(2*precision*recall/(precision+recall)))
-
-print('\nTRAIN METRIC ----------------------')
-print('Train acc: {}'.format(np.round((history.history['acc'][-1])*100, 2)))
+base_mobilenet_model = MobileNet(input_shape =  t_x.shape[1:],
+                                 include_top = False, weights = 'imagenet')
+multi_disease_model = Sequential()
+multi_disease_model.add(base_mobilenet_model)
+multi_disease_model.add(GlobalAveragePooling2D())
+multi_disease_model.add(Dropout(0.5))
+multi_disease_model.add(Dense(512))
+multi_disease_model.add(Dropout(0.5))
+multi_disease_model.add(Dense(len(all_labels), activation = 'sigmoid'))
+multi_disease_model.compile(optimizer = 'adam', loss = 'binary_crossentropy',
+                           metrics = ['binary_accuracy', 'mae'])
+multi_disease_model.summary()
 
 
 
+#
+#
+weight_path="{}_weights.best.hdf5".format('xray_class')
 
+checkpoint = ModelCheckpoint(weight_path, monitor='val_loss', verbose=1,
+                             save_best_only=True, mode='min', save_weights_only = True)
+
+early_stop = EarlyStopping(monitor="val_loss", mode="min", patience=7, verbose=1, restore_best_weights=True)
+
+lr_reduce = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=2, verbose=2, mode='min')
+
+callbacks_list = [checkpoint, early_stop, lr_reduce]
+
+#
+# #All the layers are trainable i.e. the model is fine-tuned.
+#
+adam = optimizers.Adam(learning_rate=0.02, beta_1=0.9, beta_2=0.999, amsgrad=False)
+multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+
+total = data.shape[0]
+
+class_weights = {}
+#
+for key in train_gen.class_indices.keys():
+    amount = data['Finding Labels List'].map(lambda x: key in x).sum()
+    class_number = train_gen.class_indices[key]
+    class_weights[class_number] = total / amount
+
+print("class_weights: ", class_weights)
+# those will be passed to balance the model treating of different classes
+
+history = multi_disease_model.fit_generator(train_gen,
+                              steps_per_epoch=train_gen.n//train_gen.batch_size,
+                              validation_data = valid_gen,
+                              validation_steps = valid_gen.n//valid_gen.batch_size,
+                              epochs = 3,
+                              class_weight = class_weights,
+                              callbacks = callbacks_list)
+
+multi_disease_model.save_weights('weights_model_resnet.h5')
+#
+multi_disease_model.load_weights('weights_model_resnet.h5')
+#
+
+test_gen.reset()
+steps = len(test_gen.classes) // test_gen.batch_size
+
+test_y_list = []
+pred_y_list = []
+
+for i in tqdm(range(steps)):
+    test_X, test_Y = next(test_gen)
+    pred_Y = multi_disease_model.predict(test_X)
+    test_y_list.append(test_Y)
+    pred_y_list.append(pred_Y)
+
+test_y_all = np.concatenate(test_y_list)
+pred_y_all = np.concatenate(pred_y_list)
+
+#
+#
+multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+test_gen.reset()
+steps = len(test_gen.classes) // test_gen.batch_size
+
+test_acc_list = []
+test_loss_list = []
+
+for i in range(steps):
+    test_X, test_Y = next(test_gen)
+    test_loss, test_acc = multi_disease_model.evaluate(test_X, test_Y, test_gen.batch_size, verbose=0)
+    test_acc_list.append(test_acc)
+    test_loss_list.append(test_loss)
+
+test_accuracy = np.mean(test_acc_list)
+test_loss = np.mean(test_loss_list)
+print('Test Accuracy : ', test_accuracy, 'Test Loss : ', test_loss)
 
 
