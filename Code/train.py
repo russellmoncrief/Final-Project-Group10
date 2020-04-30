@@ -225,10 +225,10 @@ model.add(Conv2D(64, kernel_size=(2,2),
                  border_mode='same'))
 model.add(MaxPooling2D(pool_size=(2, 2)))
 
-# fc
+# fully connected layer
 model.add(Flatten())
 model.add(Dense(128, activation='relu'))
-model.add(Dropout(0.2))  ## initial -  (Dropout(0.5) & no batchNorm
+model.add(Dropout(0.2)) 
 model.add(Dense(len(all_labels), activation='sigmoid'))
 
 print(model.summary())
