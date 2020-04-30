@@ -275,16 +275,16 @@ print('Test Accuracy : ', test_accuracy, 'Test Loss : ', test_loss)
 
 base_mobilenet_model = MobileNet(input_shape =  t_x.shape[1:],
                                  include_top = False, weights = 'imagenet')
-multi_disease_model = Sequential()
-multi_disease_model.add(base_mobilenet_model)
-multi_disease_model.add(GlobalAveragePooling2D())
-multi_disease_model.add(Dropout(0.5))
-multi_disease_model.add(Dense(512))
-multi_disease_model.add(Dropout(0.5))
-multi_disease_model.add(Dense(len(all_labels), activation = 'sigmoid'))
-multi_disease_model.compile(optimizer = 'adam', loss = 'binary_crossentropy',
+model = Sequential()
+model.add(base_mobilenet_model)
+model.add(GlobalAveragePooling2D())
+model.add(Dropout(0.5))
+model.add(Dense(512))
+model.add(Dropout(0.5))
+model.add(Dense(len(all_labels), activation = 'sigmoid'))
+model.compile(optimizer = 'adam', loss = 'binary_crossentropy',
                            metrics = ['binary_accuracy', 'mae'])
-multi_disease_model.summary()
+model.summary()
 
 
 weight_path="{}_weights.best.hdf5".format('xray_class')
@@ -302,7 +302,7 @@ callbacks_list = [checkpoint, early_stop, lr_reduce]
 # #All the layers are trainable i.e. the model is fine-tuned.
 
 adam = optimizers.Adam(learning_rate=0.02, beta_1=0.9, beta_2=0.999, amsgrad=False)
-multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
 
 total = data.shape[0]
 
@@ -318,7 +318,7 @@ print("class_weights: ", class_weights)
 
 # %% -------------------------------------- Training Loop ----------------------------------------------------------
 
-history = multi_disease_model.fit_generator(train_gen,
+history = model.fit_generator(train_gen,
                               steps_per_epoch=train_gen.n//train_gen.batch_size,
                               validation_data = valid_gen,
                               validation_steps = valid_gen.n//valid_gen.batch_size,
@@ -326,9 +326,9 @@ history = multi_disease_model.fit_generator(train_gen,
                               class_weight = class_weights,
                               callbacks = callbacks_list)
 
-multi_disease_model.save_weights('weights_model_resnet.h5')
+model.save_weights('weights_model_resnet.h5')
 
-multi_disease_model.load_weights('weights_model_resnet.h5')
+model.load_weights('weights_model_resnet.h5')
 
 # %% -------------------------------------- Testing Pre-trained Model ----------------------------------------------------------
 
@@ -340,14 +340,14 @@ pred_y_list = []
 
 for i in tqdm(range(steps)):
     test_X, test_Y = next(test_gen)
-    pred_Y = multi_disease_model.predict(test_X)
+    pred_Y = model.predict(test_X)
     test_y_list.append(test_Y)
     pred_y_list.append(pred_Y)
 
 test_y_all = np.concatenate(test_y_list)
 pred_y_all = np.concatenate(pred_y_list)
 
-multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
 test_gen.reset()
 steps = len(test_gen.classes) // test_gen.batch_size
 
@@ -356,7 +356,7 @@ test_loss_list = []
 
 for i in range(steps):
     test_X, test_Y = next(test_gen)
-    test_loss, test_acc = multi_disease_model.evaluate(test_X, test_Y, test_gen.batch_size, verbose=0)
+    test_loss, test_acc = model.evaluate(test_X, test_Y, test_gen.batch_size, verbose=0)
     test_acc_list.append(test_acc)
     test_loss_list.append(test_loss)
 
