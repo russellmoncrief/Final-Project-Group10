@@ -5,6 +5,6 @@ The data for this analysis was acquired from NIH dropbox https://nihcc.app.box.c
 
 
 
-### Train.py 
+### train.py 
 
 This script contains code for cleaning and preprocessing of data, including data augmentation. The models in this file are CNN and MobileNet pre-trained models.
