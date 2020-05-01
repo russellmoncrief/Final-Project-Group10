@@ -26,10 +26,11 @@ N_EPOCHS = 2
 BATCH_SIZE = 512
 
 
-data_path = '/home/ubuntu/Deep-Learning/'
+data_path = '/home/data/directory/'.   ## path to data directory
 data = pd.read_csv(os.path.join(data_path,'Data_Entry_2017.csv'))
 
-image_paths = glob(os.path.join(data_path,'xRays','images','*.png'))
+
+image_paths = glob(os.path.join(data_path,'mainFolder','subFolder','*.png'))
 
 all_image_paths = { os.path.basename(x): x for x in image_paths }
 
@@ -74,7 +75,8 @@ for c_label in all_labels:
     print((c_label,int(data[c_label].sum())))
 
 
-#Removing irrelevant columns
+# %% -------------------------------------- Removing Irrelevant Columns ----------------------------------------------------------
+
 data.drop(['Image Index','Finding Labels','Follow-up #','OriginalImage[Width','Height]',
                   'OriginalImagePixelSpacing[x','y]','Unnamed: 11'],axis=1, inplace=True)
 
@@ -82,13 +84,16 @@ data['Patient Gender']=data['Patient Gender'].map(lambda gender: 0 if gender=='M
 data['View Position']=data['View Position'].map(lambda vp: 0 if vp=='AP' else 1)
 print(data)
 
-
-
 patients=np.unique(data['Patient ID'])
+
+# %% -------------------------------------- Splitting Data ----------------------------------------------------------
+
 from sklearn.model_selection import train_test_split
 train_valid, test = train_test_split(patients,
                                    test_size = 0.2,
                                    random_state = 2020)
+
+
 train, valid = train_test_split(train_valid,
                                 test_size = 0.12,
                                 random_state = 2020)
@@ -119,20 +124,22 @@ for c_label in all_labels:
 
 pd.options.mode.chained_assignment = None
 
-##Train data
+# %% -------------------------------------- Training Data ----------------------------------------------------------
 
 min_age = min(train_df['Patient Age'])
 diff = max(train_df['Patient Age']) - min_age
 train_df['Patient Age'] = train_df['Patient Age'].map(lambda age: (age-min_age)/diff)
 train_df.drop('Patient ID',axis=1,inplace=True)
 
-##Validation data
+# %% -------------------------------------- Validation Data ----------------------------------------------------------
+
 min_age = min(valid_df['Patient Age'])
 diff = max(valid_df['Patient Age']) - min_age
 valid_df['Patient Age'] = valid_df['Patient Age'].map(lambda age: (age-min_age)/diff)
 valid_df.drop('Patient ID',axis=1,inplace=True)
 
-##Test data
+# %% -------------------------------------- Test Data ----------------------------------------------------------
+
 min_age = min(test_df['Patient Age'])
 diff = max(test_df['Patient Age']) - min_age
 test_df['Patient Age'] = test_df['Patient Age'].map(lambda age: (age-min_age)/diff)
@@ -140,7 +147,7 @@ test_df.drop('Patient ID',axis=1,inplace=True)
 
 
 
-## Preprocessing
+# %% -------------------------------------- Preprocessing ----------------------------------------------------------
 
 IMG_SIZE = (224, 224)   ## Resize images
 
@@ -157,7 +164,7 @@ data_gen = ImageDataGenerator(samplewise_center=True,
 
 
 
-# Creating DataFrame Iterators
+# %% -------------------------------------- Creating Dataframe Iterators ----------------------------------------------------------
 
 print('Generating Training DataFrame Iterator')
 train_gen = data_gen.flow_from_dataframe(dataframe=train_df,
@@ -202,7 +209,7 @@ train_gen.reset()
 print("^^^^^^^^^^^^^^^^^^^^")
 
 
-## Model
+# %% -------------------------------------- CNN Model ----------------------------------------------------------
 
 model = Sequential()
 # conv1
@@ -218,17 +225,19 @@ model.add(Conv2D(64, kernel_size=(2,2),
                  border_mode='same'))
 model.add(MaxPooling2D(pool_size=(2, 2)))
 
-# fc
+# fully connected layer
 model.add(Flatten())
 model.add(Dense(128, activation='relu'))
-model.add(Dropout(0.2))  ## initial -  (Dropout(0.5) & no batchNorm
+model.add(Dropout(0.2)) 
 model.add(Dense(len(all_labels), activation='sigmoid'))
 
 print(model.summary())
 
 model.compile(loss='binary_crossentropy', optimizer=Adam(lr=LR), metrics=['accuracy'])
 
+
 # %% -------------------------------------- Training Loop ----------------------------------------------------------
+
 history = model.fit_generator(train_gen,
                               steps_per_epoch=train_gen.n//train_gen.batch_size,
                               validation_data = valid_gen,
@@ -241,6 +250,8 @@ model = load_model("CNN.h5")  ## Load model for test set evaluation
 
 test_gen.reset()
 steps = len(test_gen.classes) // test_gen.batch_size
+
+# %% -------------------------------------- Testing Model ----------------------------------------------------------
 
 test_acc_list = []
 test_loss_list = []
@@ -256,40 +267,26 @@ test_loss = np.mean(test_loss_list)
 print('Test Accuracy : ', test_accuracy, 'Test Loss : ', test_loss)
 
 
-fig, ax = plt.subplots(1, 2, figsize=(10, 3))
-ax = ax.ravel()
-
-for i, met in enumerate(['acc', 'loss']):
-    ax[i].plot(history.history[met])
-    ax[i].plot(history.history['val_' + met])
-    ax[i].set_title('Model {}'.format(met))
-    ax[i].set_xlabel('epochs')
-    ax[i].set_ylabel(met)
-    ax[i].legend(['train', 'val'])
-
-plt.show()
 
 
-## ------ Pre-Trained Model
+
+# %% -------------------------------------- Using Pre-trained Model ----------------------------------------------------------
 
 
 base_mobilenet_model = MobileNet(input_shape =  t_x.shape[1:],
                                  include_top = False, weights = 'imagenet')
-multi_disease_model = Sequential()
-multi_disease_model.add(base_mobilenet_model)
-multi_disease_model.add(GlobalAveragePooling2D())
-multi_disease_model.add(Dropout(0.5))
-multi_disease_model.add(Dense(512))
-multi_disease_model.add(Dropout(0.5))
-multi_disease_model.add(Dense(len(all_labels), activation = 'sigmoid'))
-multi_disease_model.compile(optimizer = 'adam', loss = 'binary_crossentropy',
+model = Sequential()
+model.add(base_mobilenet_model)
+model.add(GlobalAveragePooling2D())
+model.add(Dropout(0.5))
+model.add(Dense(512))
+model.add(Dropout(0.5))
+model.add(Dense(len(all_labels), activation = 'sigmoid'))
+model.compile(optimizer = 'adam', loss = 'binary_crossentropy',
                            metrics = ['binary_accuracy', 'mae'])
-multi_disease_model.summary()
+model.summary()
 
 
-
-#
-#
 weight_path="{}_weights.best.hdf5".format('xray_class')
 
 checkpoint = ModelCheckpoint(weight_path, monitor='val_loss', verbose=1,
@@ -301,16 +298,16 @@ lr_reduce = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=2, verbos
 
 callbacks_list = [checkpoint, early_stop, lr_reduce]
 
-#
+
 # #All the layers are trainable i.e. the model is fine-tuned.
-#
+
 adam = optimizers.Adam(learning_rate=0.02, beta_1=0.9, beta_2=0.999, amsgrad=False)
-multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
 
 total = data.shape[0]
 
 class_weights = {}
-#
+
 for key in train_gen.class_indices.keys():
     amount = data['Finding Labels List'].map(lambda x: key in x).sum()
     class_number = train_gen.class_indices[key]
@@ -319,7 +316,9 @@ for key in train_gen.class_indices.keys():
 print("class_weights: ", class_weights)
 # those will be passed to balance the model treating of different classes
 
-history = multi_disease_model.fit_generator(train_gen,
+# %% -------------------------------------- Training Loop ----------------------------------------------------------
+
+history = model.fit_generator(train_gen,
                               steps_per_epoch=train_gen.n//train_gen.batch_size,
                               validation_data = valid_gen,
                               validation_steps = valid_gen.n//valid_gen.batch_size,
@@ -327,10 +326,11 @@ history = multi_disease_model.fit_generator(train_gen,
                               class_weight = class_weights,
                               callbacks = callbacks_list)
 
-multi_disease_model.save_weights('weights_model_resnet.h5')
-#
-multi_disease_model.load_weights('weights_model_resnet.h5')
-#
+model.save_weights('weights_model_resnet.h5')
+
+model.load_weights('weights_model_resnet.h5')
+
+# %% -------------------------------------- Testing Pre-trained Model ----------------------------------------------------------
 
 test_gen.reset()
 steps = len(test_gen.classes) // test_gen.batch_size
@@ -340,16 +340,14 @@ pred_y_list = []
 
 for i in tqdm(range(steps)):
     test_X, test_Y = next(test_gen)
-    pred_Y = multi_disease_model.predict(test_X)
+    pred_Y = model.predict(test_X)
     test_y_list.append(test_Y)
     pred_y_list.append(pred_Y)
 
 test_y_all = np.concatenate(test_y_list)
 pred_y_all = np.concatenate(pred_y_list)
 
-#
-#
-multi_disease_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
+model.compile(loss='binary_crossentropy', optimizer=adam, metrics=['mse'])
 test_gen.reset()
 steps = len(test_gen.classes) // test_gen.batch_size
 
@@ -358,7 +356,7 @@ test_loss_list = []
 
 for i in range(steps):
     test_X, test_Y = next(test_gen)
-    test_loss, test_acc = multi_disease_model.evaluate(test_X, test_Y, test_gen.batch_size, verbose=0)
+    test_loss, test_acc = model.evaluate(test_X, test_Y, test_gen.batch_size, verbose=0)
     test_acc_list.append(test_acc)
     test_loss_list.append(test_loss)
 
